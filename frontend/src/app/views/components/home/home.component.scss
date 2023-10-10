@@ -1,0 +1,51 @@
+.grid-container {
+    height: 92vh;
+    display: grid;
+    grid-template-columns: 60% 40%;
+    background-image: url("../../../../assets/images/wave.png");
+    background-size: 80% 40%;
+    background-position: 0vh 60vh;
+    background-repeat: no-repeat;
+}
+
+.laptop_img {
+    width: 100%;
+    object-fit: contain;
+    margin-top: 20vh;
+}
+
+.show_img {
+    width: 80%;
+    margin: auto;
+    object-fit: contain;
+}
+
+.main_title {
+    font-weight: 600;
+    margin: 10vh 20vw;
+}
+
+.cards_grid {
+    margin-left: 5vw;
+    display: grid;
+    grid-template-columns: 25% 25% 25%;
+    gap: 20px;
+    cursor: pointer;
+}
+
+.option_card {
+    height: 30vh;
+    object-fit: contain;
+    padding-bottom: 20px;
+}
+
+.option_card:hover {
+    box-shadow: rgb(38, 57, 77) 0px 20px 30px -10px;
+    transition: box-shadow 0.5s;
+}
+
+.card_header {
+    font-weight: 600;
+    font-size: 20px;
+    text-align: center;
+}

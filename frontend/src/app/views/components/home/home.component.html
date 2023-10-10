@@ -1,0 +1,33 @@
+<div class="grid-container">
+    <div>
+        <h1 class="main_title">Graphix</h1>
+
+        <div class="cards_grid">
+            <mat-card class="option_card" [routerLink] = "['/whiteboard']">
+                <mat-card-content class="flex_row">
+                    <img src = "../../../../assets/images/technical-drawing.png" class="show_img">
+                </mat-card-content>
+                <mat-card-header class="card_header">Start drawng</mat-card-header>
+            </mat-card>
+
+            
+            <mat-card class="option_card" (click) = "openLogin()">
+                <mat-card-content class="flex_row">
+                    <img src = "../../../../assets/images/login.png" class="show_img">
+                </mat-card-content>
+                <mat-card-header class="card_header">Login</mat-card-header>
+            </mat-card>
+            
+            <mat-card class="option_card" (click) = "openLogin()">
+                <mat-card-content class="flex_row">
+                    <img src = "../../../../assets/images/sign-up.png" class="show_img">
+                </mat-card-content>
+                <mat-card-header class="card_header">Register</mat-card-header>
+            </mat-card>
+        </div>
+    </div>
+
+    <div>
+        <img src="../../../../assets/images/laptop.png" class="laptop_img">
+    </div>
+</div>

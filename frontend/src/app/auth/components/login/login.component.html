@@ -1,0 +1,29 @@
+<div class="login_popup">
+    <div>
+        <img src="../../../../assets/images/avatar.svg" class="avatar_image">
+        <h3>Log in</h3>
+    </div>
+
+    <div class="google_auth" (click) = "loginWithGoogle()" id = 'loginBtn'>
+        
+    </div>
+
+    Or
+
+    <form class="login_form" [formGroup] = "loginForm">
+        <mat-form-field appearance = "outline" class="form_field">
+            <mat-label>Email: </mat-label>
+            <input matInput type="text" formControlName = "email">
+        </mat-form-field>
+
+        <mat-form-field appearance = "outline" class="form_field">
+            <mat-label>Password: </mat-label>
+            <input matInput type="password" formControlName = "password">
+        </mat-form-field>
+        <div class="link">Forgot your password?</div>
+
+        <div>
+            <button mat-raised-button color = "accent" (click) = "login()">Login</button>
+        </div>
+    </form>
+</div>

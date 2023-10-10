@@ -1,0 +1,24 @@
+<nav class="navbar">
+    <div>
+        <mat-icon class="menu_icon icon" (click) = "toggleSideNav()">menu</mat-icon>
+        <mat-icon class="icon" svgIcon = "export_icon" (click) = "openExportDialog()"></mat-icon>
+        <input type = "file" hidden #file (change) = "handleChosenFile($event)">
+        <mat-icon class="icon" svgIcon = "import_icon" (click) = "file.click()"></mat-icon>
+        <mat-icon class="icon" svgIcon = "add_whiteboard_icon" (click) = "openNewWhiteboard()"></mat-icon>
+        <mat-icon class="icon" svgIcon = "save_icon" *ngIf = "isLoggedIn" (click) = "saveWhiteboard()"></mat-icon>
+    </div>
+    <div class="data">
+        <div class="username">Username</div>
+        <div class="zoom">100%</div>
+    </div>
+    <div class="account_buttons">
+        <mat-icon class="icon" [routerLink] = "['']">home</mat-icon>
+        <span [routerLink] = "['teacher']"><mat-icon class="icon" svgIcon = "dashboard_icon" *ngIf = "isLoggedIn"></mat-icon></span>
+        <!-- <button mat-raised-button color="accent" (click) = "openLoginForm()" *ngIf = "!isLoggedIn">LogIn  -->
+            <mat-icon class="icon" svgIcon = "login" (click) = "openLoginForm()" *ngIf = "!isLoggedIn"></mat-icon>
+        <!-- </button> -->
+        <!-- <button mat-raised-button color="accent" (click) = "logout()" *ngIf = "isLoggedIn">LogOut  -->
+            <mat-icon class="icon" svgIcon = "login"(click) = "logout()" *ngIf = "isLoggedIn"></mat-icon>
+        <!-- </button> -->
+    </div>
+</nav>

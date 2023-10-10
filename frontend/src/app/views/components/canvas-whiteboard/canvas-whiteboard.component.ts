@@ -1,0 +1,359 @@
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { BehaviorSubject, Subscription, map, merge, mergeMap, of, switchMap, takeWhile } from 'rxjs';
+import { Edge } from 'src/app/entities/edge';
+import { Graph } from 'src/app/entities/graph';
+import { ActiveShapesService } from 'src/app/shared/services/active-shapes.service';
+import { ColorService } from 'src/app/shared/services/color.service';
+import { DrawingService } from 'src/app/shared/services/drawing.service';
+import { GraphService } from 'src/app/shared/services/graph.service';
+import { ShapeActionsService } from 'src/app/shared/services/shape-actions.service';
+import { ShapesService } from 'src/app/shared/services/shapes.service';
+import { Node } from 'src/app/entities/node';
+import { ShapeActionsHelper } from 'src/app/helpers/shape-actions.helper';
+import { EdgeTypes } from 'src/app/shared/data/enums/edge-types';
+import { EdgesHelper } from 'src/app/helpers/edges.helper';
+import { FileService } from 'src/app/shared/services/file.service';
+import { fabric } from 'fabric';
+import { MatDialog, MatDialogConfig } from '@angular/material/dialog';
+import { SaveJpgPopupComponent } from 'src/app/shared/components/save-jpg-popup/save-jpg-popup.component';
+import { SavePdfPopupComponent } from 'src/app/shared/components/save-pdf-popup/save-pdf-popup.component';
+import { ColorsHelper } from 'src/app/helpers/colors.helper';
+import { GraphHelper } from 'src/app/helpers/graph.helper';
+import { FileHelper } from 'src/app/helpers/file-helper';
+
+@Component({
+  selector: 'app-canvas-whiteboard',
+  templateUrl: './canvas-whiteboard.component.html',
+  styleUrls: ['./canvas-whiteboard.component.scss']
+})
+export class CanvasWhiteboardComponent implements OnInit, OnDestroy {
+
+  private whiteBoardCanvas!: fabric.Canvas;
+  public drownShapes: fabric.Object[] = [];
+  private subscriptions: Subscription = new Subscription();
+  public isFillSync: boolean = false;
+  public isStrokeSync: boolean = false;
+  public isTextSync: boolean = false;
+  public isDrawSync: boolean = false;
+  private isColorMode: boolean = false;
+  private kill$: BehaviorSubject<any> = new BehaviorSubject<any>(false);
+  private currentSelectedEdgeType!: EdgeTypes;
+  private currentNewEdge!: Edge | null;
+  private currentGraph: Graph = new Graph([]);
+
+  constructor(private drawingService: DrawingService,
+    private activeShapesService: ActiveShapesService,
+    private colorService: ColorService,
+    private shapesService: ShapesService,
+    private dialog: MatDialog,
+    private shapeActionsService: ShapeActionsService,
+    private graphService: GraphService,
+    private shapeActionsHelper: ShapeActionsHelper,
+    private edgesHelper: EdgesHelper,
+    private fileService: FileService,
+    private colorsHelper: ColorsHelper,
+    private graphHelper: GraphHelper,
+    private fileHelper: FileHelper) { }
+  
+
+  ngOnInit(): void {
+    this.shapeActionsService.actionTriggeredObs.subscribe(() => {
+      this.whiteBoardCanvas.renderAll();
+    });
+    this.shapeActionsService.triggerDestroyObs.subscribe((object) => {
+      this.whiteBoardCanvas.remove(object);
+    });
+    this.graphService.askForGraphObs.subscribe((res) => {
+      // this.graphService.updateCurrentGraphObj(this.currentGraph)
+      this.graphService.updateCurrentGraphObj(this.currentGraph);
+    });
+    this.shapeActionsService.toggleColorsObs.subscribe((res) => {
+      this.isColorMode = res;
+    });
+    this.whiteBoardCanvas = this.drawingService.createCanvas('whiteboard_canvas', {
+      preserveObjectStacking: true
+    });
+    this.whiteBoardCanvas.setDimensions({
+      width: window.innerWidth * 81 / 100,
+      height: window.innerHeight * 82 / 100
+    });
+    this.activeShapesService.activeShapes.pipe(
+      mergeMap((newShape) => {
+        this.whiteBoardCanvas.add(newShape);
+        if(newShape) this.kill$.next(newShape);
+        return merge(this.colorsHelper.colorFillRequest(newShape), this.colorsHelper.colorStrokeRequest(newShape));
+      })
+    ).subscribe(() => { });
+    this.kill$.pipe(
+      switchMap((newSelectedShape: any) => {
+        if(newSelectedShape != false) {
+          let unblockRequest = this.shapeActionsService.blockedShape.pipe(
+            takeWhile(() => this.kill$.value == newSelectedShape),
+            map((res: boolean) => {
+              newSelectedShape.set('hasControls', res);
+              this.whiteBoardCanvas.renderAll();
+            })
+          );
+          let deletedRequest = this.shapeActionsService.deletedShape.pipe(
+            takeWhile(() => this.kill$.value == newSelectedShape),
+            map((result) => { 
+              if(result){
+                this.whiteBoardCanvas.remove(newSelectedShape)
+                this.currentGraph.deleteNodeAt(this.currentGraph.getIndexForNodeDrawing(newSelectedShape)).forEach((edge) => {
+                  this.whiteBoardCanvas.remove(edge);
+                });
+              } 
+            })
+          );
+          let scaleRequest = this.shapeActionsService.scaleShape.pipe(
+            takeWhile(() => this.kill$.value == newSelectedShape),
+            map((result: number) => { 
+              newSelectedShape.scale(result);
+              this.whiteBoardCanvas.renderAll();
+            })
+          );
+          let rotationRequest: any = this.shapeActionsService.rotationShape.pipe(
+            takeWhile(() => this.kill$.value == newSelectedShape),
+            map((result: number) => { 
+              newSelectedShape.rotate(result);
+              this.whiteBoardCanvas.renderAll();
+            })
+          );
+          let opacityRequest = this.shapeActionsService.opacityShape.pipe(
+            takeWhile(() => this.kill$.value == newSelectedShape),
+            map((result: number) => { 
+              newSelectedShape.opacity = result;
+              this.whiteBoardCanvas.renderAll();
+            })
+          );
+          let duplicateRequest = this.shapeActionsService.duplicatedShape.pipe(
+            takeWhile(() => this.kill$.value == newSelectedShape),
+            map((isDuplicated: boolean) => { if(isDuplicated) this.activeShapesService.addShapeToWhiteboard(newSelectedShape, true) })
+          );
+          return merge(unblockRequest, deletedRequest, scaleRequest, rotationRequest, opacityRequest, duplicateRequest, this.colorsHelper.colorFillRequest(newSelectedShape), this.colorsHelper.colorStrokeRequest(newSelectedShape));
+        }
+        return of(newSelectedShape)
+      })
+    ).subscribe((result) => { })
+    this.observeEdges();
+    this.observeFileActions();
+    this.subscriptions.add(
+      this.shapeActionsService.toggleDrawingObs.subscribe((res) => {
+        this.whiteBoardCanvas.isDrawingMode = res;
+        this.isDrawSync = res;
+        this.whiteBoardCanvas.renderAll();
+      })
+    )
+  }
+
+  public observeEdges(): void {
+    this.graphService.newNodesObs.pipe(
+      mergeMap((node: Node) => {
+        this.currentGraph.addNewNode(node);
+        this.whiteBoardCanvas.add(node.getNodeDrawing());
+        node.getNodeDrawing().on("mousedown", () => {
+          this.kill$.next(node.getNodeDrawing())
+        });
+        return merge(this.graphHelper.colorFillRequest(node), this.graphHelper.colorTextRequest(node), this.graphHelper.activateTextRequest(node), this.fileHelper.killGraphObjReq(node.getNodeDrawing()));
+      })
+    ).subscribe(() => { });
+    this.graphService.newEdgeObs.pipe(
+      mergeMap((newEdge: Edge) => {
+        newEdge.getLeftNode().getNodeDrawing().on("moving", (event) =>  {
+          newEdge.setLineCoords(event.pointer, true);
+        });
+        newEdge.getLine().on("mousedown", () => {
+          this.kill$.next(newEdge.getLine())
+        });
+        if(newEdge.getAdditionalSymbols()){
+          newEdge.getAdditionalSymbols().on("mousedown", () => {
+            this.kill$.next(newEdge.getAdditionalSymbols())
+          });
+        }
+        newEdge.getRightNode().getNodeDrawing().on("moving", (event) => {
+          newEdge.setLineCoords(event.pointer, false);
+        });
+        return merge(this.graphHelper.colorEdgeRequest(newEdge), this.fileHelper.killGraphObjReq(newEdge.getLine()), this.fileHelper.killGraphObjReq(newEdge.getAdditionalSymbols()));
+      })
+    ).subscribe(() => { })
+    let newEdge!: any;
+    let adjacentSymbols!: any;
+    let mouseUpHandler = () => {
+      if(newEdge != null && this.currentNewEdge?.getRightNode()){
+        newEdge = null;
+        adjacentSymbols = null;
+        this.currentNewEdge = null;
+      } else {
+        if(this.whiteBoardCanvas.getActiveObjects().length === 1){
+
+          let currentNode = this.currentGraph.getNodeRefAt(this.currentGraph.getIndexForNodeDrawing(this.whiteBoardCanvas.getActiveObjects()[0]));
+          let pointer = this.whiteBoardCanvas.getActiveObject();
+          if(this.currentSelectedEdgeType === EdgeTypes.UNORIENTED_WITH_NO_COST) newEdge = this.edgesHelper.createEdge(pointer);
+          if(this.currentSelectedEdgeType === EdgeTypes.UNORIENTED_WITH_COST){
+            let myNewEdge = this.edgesHelper.createEdgeWithCost(pointer);
+            newEdge = myNewEdge[0];
+            adjacentSymbols = myNewEdge[1];
+          } 
+          if(this.currentSelectedEdgeType === EdgeTypes.ORIENTED_WITH_NO_COST){
+            let myNewEdge = this.edgesHelper.createOrientedEdge(pointer);
+            newEdge = myNewEdge[0];
+            adjacentSymbols = myNewEdge[1];
+          } 
+          if(this.currentSelectedEdgeType === EdgeTypes.DASHED_EDGE) newEdge = this.edgesHelper.createDashedEdge(pointer);
+          this.whiteBoardCanvas.add(newEdge);
+          newEdge.sendToBack();
+          if(adjacentSymbols) this.whiteBoardCanvas.add(adjacentSymbols);
+          this.whiteBoardCanvas.renderAll();
+          this.currentNewEdge = new Edge(newEdge, currentNode);
+        } 
+      }
+    };
+    let mouseMoveHandler = (event: any) => {
+      if(newEdge != null){
+        newEdge = this.edgesHelper.connectEdge(event, newEdge, this.whiteBoardCanvas.getPointer(event.e));
+        if(adjacentSymbols) {
+          if(this.currentSelectedEdgeType === EdgeTypes.UNORIENTED_WITH_COST) adjacentSymbols = this.edgesHelper.updateLabelOfCost(adjacentSymbols, newEdge);
+          if(this.currentSelectedEdgeType === EdgeTypes.ORIENTED_WITH_NO_COST) adjacentSymbols = this.edgesHelper.updateArrowHead(adjacentSymbols, newEdge, this.whiteBoardCanvas.getPointer(event.e));
+        }
+        this.whiteBoardCanvas.renderAll();
+      } 
+    };
+    let mouseDownHandler = (event: any) => {
+      if(this.currentNewEdge != null) {
+        newEdge.set('opacity', 1);
+        this.currentNewEdge?.setRightNode(this.currentGraph.getNodeRefAt(this.currentGraph.getIndexForNodeDrawing(event.target)));
+        if(adjacentSymbols){
+          this.currentNewEdge.setAdditionalSymbols(adjacentSymbols);
+          if(this.currentSelectedEdgeType === EdgeTypes.UNORIENTED_WITH_COST) {
+            this.whiteBoardCanvas.setActiveObject(adjacentSymbols);
+            adjacentSymbols.enterEditing()
+            adjacentSymbols.hiddenTextarea.focus();
+          }
+        }
+        this.currentNewEdge.getLine().setCoords();
+        this.currentNewEdge.getLine().set('lockMovementX', true);
+        this.currentNewEdge.getLine().set('lockMovementY', true);
+        this.currentGraph.addNewEdge(this.currentNewEdge);
+        this.graphService.addEdge(this.currentNewEdge);
+      }
+    }
+    this.subscriptions.add(
+      this.graphService.addEdgeObs.subscribe((res: any) => {
+        this.currentSelectedEdgeType = res;
+        this.whiteBoardCanvas.off("mouse:up", mouseUpHandler)
+        this.whiteBoardCanvas.off("mouse:move", mouseMoveHandler);
+        this.whiteBoardCanvas.off("mouse:down", mouseDownHandler);
+        if(res != false) {
+          this.whiteBoardCanvas.on("mouse:up", mouseUpHandler);
+          this.whiteBoardCanvas.on("mouse:move", mouseMoveHandler);
+          this.whiteBoardCanvas.on("mouse:down", mouseDownHandler);
+        } 
+      })              
+    )
+  }
+  public observeFileActions(): void {
+    this.fileService.exportFileObs.subscribe((res) => {
+      switch (res) {
+        case 'svg':
+          this.fileService.killNonGraphObjects();
+          let myLink = document.createElement("a");
+          let resultObject = {
+            fullCanvas: `${this.whiteBoardCanvas.toSVG().replace('<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\" ?>\n<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n',"")}`,
+            nodes: this.currentGraph.nodesList.map((node) => {
+              node.setDrawingSVG(node.getNodeDrawing().toSVG().replace('<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\" ?>\n<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n',""))
+              return node
+            }),
+            adjacencyList: this.currentGraph.adjacency_list
+          }
+          let resultJSON = JSON.stringify(resultObject);
+          console.log("there it is ", resultJSON)
+          let file = new Blob([resultJSON], {type:"text/json"});
+          myLink.href = URL.createObjectURL(file);
+          myLink.download = "myCanvas.txt";
+          document.body.appendChild(myLink);
+          myLink.click();
+          document.body.removeChild(myLink);
+          break;
+        
+        case 'png':
+          this.graphService.addNewGraph(JSON.stringify(`${this.whiteBoardCanvas.toSVG().replace('<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\" ?>\n<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n',"")}`));
+          let dialogConfig = new MatDialogConfig();
+          dialogConfig.width = '60vw';
+          dialogConfig.height = '70vh';
+          this.dialog.open(SaveJpgPopupComponent, dialogConfig);
+          break;
+        
+        case 'pdf':
+          this.graphService.addNewGraph(JSON.stringify(`${this.whiteBoardCanvas.toSVG().replace('<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\" ?>\n<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n',"")}`));
+          let pdfDialogConfig = new MatDialogConfig();
+          pdfDialogConfig.width = '60vw';
+          pdfDialogConfig.height = '70vh';
+          this.dialog.open(SavePdfPopupComponent, pdfDialogConfig);
+          break;
+      
+        default:
+          break;
+      }
+    });
+    this.fileService.filesObs.subscribe((svgFile) => {
+      let fileReader = new FileReader()
+      fileReader.onload = (event) => {
+        let fileString: any = fileReader.result;
+        let fileContent = JSON.parse(fileString);
+        console.log("yep ", fileContent)
+        fabric.loadSVGFromString(fileContent.fullCanvas, (results) => {
+
+          results.forEach((canvasObject) => {
+            this.whiteBoardCanvas.add(canvasObject);
+            this.whiteBoardCanvas.renderAll();
+            canvasObject.on("mousedown", () => this.kill$.next(canvasObject))
+          })
+        });
+        let newGraphNodes: Node[] = [];
+        fileContent.nodes.forEach((node: any) => {
+          let svgRepr: string = node.representationSVG
+          console.log(`<svg>${svgRepr}</svg>`);
+          fabric.loadSVGFromString(`<svg>${svgRepr}</svg>`, (result) => {
+            newGraphNodes.push(new Node(node.label, 0, result, node.indexInGraph));
+          });
+        });
+        this.currentGraph = new Graph(newGraphNodes, false);
+        this.currentGraph.updateAdjacencyList(fileContent.adjacencyList);
+        this.addGraphToCanvas();
+      }
+      fileReader.readAsText(svgFile);
+    })
+  }
+
+  private addGraphToCanvas(): void {
+    this.currentGraph.nodesList.forEach((node) => {
+      this.whiteBoardCanvas.add(node.getNodeDrawing());
+      node.getNodeDrawing().on("mousedown", () => {
+        this.kill$.next(node.getNodeDrawing());
+      });
+      this.graphHelper.colorFillRequest(node).subscribe(() => {});
+      this.graphHelper.colorTextRequest(node).subscribe(() => {});
+      this.graphHelper.activateTextRequest(node).subscribe(() => {});
+    });
+    console.log("ssss ", this.currentGraph.adjacency_list)
+    this.currentGraph.adjacency_list.forEach((edgeList: any, index: number) => {
+      edgeList.forEach((edge: any, j: number) => {
+        if(edge != false) {
+          let fabricEdge = this.shapesService.createLine(edge);
+          let newEdge = new Edge(fabricEdge, this.currentGraph.getNodeRefAt(index), this.currentGraph.getNodeRefAt(j));
+          this.whiteBoardCanvas.add(fabricEdge);
+          fabricEdge.setCoords();
+          fabricEdge.set('lockMovementX', true);
+          fabricEdge.set('lockMovementY', true);
+          this.graphService.addEdge(newEdge);
+        }
+      })
+    })
+    this.whiteBoardCanvas.renderAll();
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
+  }
+
+}

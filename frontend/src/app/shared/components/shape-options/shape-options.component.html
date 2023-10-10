@@ -1,0 +1,38 @@
+<div>
+    <div class="grid">
+        <span class = "label">Scale</span>
+        <span>
+            <button mat-mini-fab class="unit_btn" (click) = "decreaseScale()">-</button>
+            <mat-form-field appearance = "outline" class="scale_input">
+                <input type="text" matInput [(ngModel)] = "scaleUnit" (ngModelChange) = "updateScale()">
+            </mat-form-field>
+            <button mat-mini-fab class="unit_btn" (click) = "increaseScale()">+</button>
+        </span>
+    </div>
+
+    <div>
+        <div class="grid">
+            <span class = "label">Rotate</span>
+            <span>
+                <mat-form-field appearance = "outline" class="scale_input">
+                    <input type="text" matInput [(ngModel)] = "rotationUnit" (ngModelChange) = "updateRotation()">
+                </mat-form-field>
+                <span class="pointer" (click) = "updateRotation(90)"><mat-icon svgIcon = "rotate_right_icon"></mat-icon></span>
+            </span>
+        </div>
+    </div>
+
+    <div class="grid">
+        <span class = "label">Border width</span>
+        <span>aaaa</span>
+    </div>
+
+    <div class="grid">
+        <span class = "label">Opacity</span>
+        <span>
+            <mat-form-field appearance = "outline" class="scale_input">
+                <input type="text" matInput [(ngModel)] = "opacityUnit" (ngModelChange) = "updateOpacity()">
+            </mat-form-field>
+        </span>
+    </div>
+</div>

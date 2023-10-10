@@ -1,0 +1,22 @@
+.grid {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 40% 60%;
+}
+
+.label {
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.scale_input {
+    width: 40px;
+    margin-left: 5px;
+    margin-right: 5px;
+}
+
+.unit_btn {
+    width: 30px;
+    height: 30px;
+    font-weight: 500;
+}

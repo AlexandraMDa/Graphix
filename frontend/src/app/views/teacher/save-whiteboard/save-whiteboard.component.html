@@ -1,0 +1,25 @@
+<div>
+    <h2>Save the whiteboard</h2>
+    <form [formGroup] = "whiteboardForm">
+        <mat-form-field>
+            <mat-label>Type in whiteboard name</mat-label>
+            <input matInput type="text" formControlName = "name">
+        </mat-form-field>
+    </form>
+    <button mat-raised-button color = "accent" (click) = "saveWhiteboard()">Save</button>
+</div>
+
+<div *ngIf = "!loading" class="container">
+    <div class="center_items icon_item">
+        <mat-icon svgIcon = "check_success"></mat-icon>
+    </div>
+    <div class="center_items">
+        <h1>The whiteboard was succesfully saved!</h1>
+        <div class="canvas_preview">
+            <canvas id="graph_canvas"></canvas>
+        </div>
+    </div>
+    <div class="center_items">
+        <button mat-raised-button color = "accent">Back to drawing</button>
+    </div>
+</div>
